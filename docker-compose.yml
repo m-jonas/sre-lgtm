@@ -1,0 +1,76 @@
+services:
+  loki:
+    image: grafana/loki:2.9.1
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./config/loki.yaml:/etc/loki/local-config.yaml
+    networks:
+      - lgtm
+
+  tempo:
+    image: grafana/tempo:2.2.3
+    command: [ "-config.file=/etc/tempo.yaml" ]
+    volumes:
+      - ./config/tempo.yaml:/etc/tempo.yaml
+    ports:
+      - "3200:3200"
+    networks:
+      - lgtm
+
+  mimir:
+    image: grafana/mimir:2.10.1
+    command: [ "-config.file=/etc/mimir.yaml" ]
+    volumes:
+      - ./config/mimir.yaml:/etc/mimir.yaml
+    ports:
+      - "9009:9009"
+    networks:
+      - lgtm
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.87.0
+    command: [ "--config=/etc/otel-collector.yaml" ]
+    volumes:
+      - ./config/otel-collector.yaml:/etc/otel-collector.yaml
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    networks:
+      - lgtm
+    depends_on:
+      - loki
+      - tempo
+      - mimir
+
+  grafana:
+    image: grafana/grafana:10.1.5
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+    volumes:
+      - ./config/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
+      - ./config/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+    ports:
+      - "3000:3000"
+    networks:
+      - lgtm
+    depends_on:
+      - loki
+      - tempo
+      - mimir
+
+  stock-generator:
+    build:
+      context: ./app
+    environment:
+      - OTLP_ENDPOINT=http://otel-collector:4317
+    networks:
+      - lgtm
+    depends_on:
+      - otel-collector
+
+networks:
+  lgtm:
