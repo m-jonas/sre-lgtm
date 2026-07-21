@@ -74,6 +74,37 @@ To run this project, you need the following installed on your local machine:
 - **Grafana Dashboards:** Dashboards can be added to `config/grafana/provisioning/dashboards/`.
 - **LGTM Configurations:** Individual configurations for Loki, Tempo, and Mimir are located in the `config/` directory (`loki.yaml`, `tempo.yaml`, `mimir.yaml`).
 - **Python Application:** The source code and `Dockerfile` for the `stock-generator` are in the `app/` directory.
+## Chaos Engineering
+
+This project includes a standalone chaos engineering script (`chaos_monkey.py`) that randomly targets and disrupts running services (using Docker Compose `kill` or `restart`) while generating its own OpenTelemetry telemetry.
+
+To run the chaos monkey:
+
+1. **Ensure the Environment is Running:**
+   Make sure the LGTM stack and custom network are running before executing the script:
+   ```bash
+   docker compose up -d
+   ```
+
+2. **Set up a Virtual Environment:**
+   It is recommended to run the script in a virtual environment to manage dependencies:
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate
+   ```
+
+3. **Install Dependencies:**
+   Install the required OpenTelemetry packages from `requirements-chaos.txt`:
+   ```bash
+   pip install -r requirements-chaos.txt
+   ```
+
+4. **Run the Script:**
+   Execute the chaos monkey script to trigger disruptions:
+   ```bash
+   python chaos_monkey.py
+   ```
+
 ## Troubleshooting
 
 ### "operation not supported" Error on Startup
