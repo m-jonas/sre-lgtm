@@ -74,3 +74,33 @@ To run this project, you need the following installed on your local machine:
 - **Grafana Dashboards:** Dashboards can be added to `config/grafana/provisioning/dashboards/`.
 - **LGTM Configurations:** Individual configurations for Loki, Tempo, and Mimir are located in the `config/` directory (`loki.yaml`, `tempo.yaml`, `mimir.yaml`).
 - **Python Application:** The source code and `Dockerfile` for the `stock-generator` are in the `app/` directory.
+## Troubleshooting
+
+### "operation not supported" Error on Startup
+If you run `docker compose up -d --build` and encounter an error similar to this:
+
+```
+failed to create endpoint ... on network ... : failed to add the host (veth...) <=> sandbox (veth...) pair interfaces: operation not supported
+```
+
+This is often caused by kernel limitations related to the `overlay` or `overlay2` storage drivers when dealing with network namespaces (often in constrained virtualized environments like LXC or some specific Linux setups).
+
+**Solution:**
+You can resolve this by configuring Docker to use the `vfs` storage driver. This driver is less disk-space efficient because it doesn't use layered filesystems (it does full copies), but it works well in restricted environments.
+
+1.  Create or edit the Docker daemon configuration file:
+    ```bash
+    echo '{ "storage-driver": "vfs" }' | sudo tee /etc/docker/daemon.json
+    ```
+2.  Restart the Docker service for the changes to take effect:
+    ```bash
+    sudo systemctl restart docker
+    ```
+3.  Clean up any broken network state:
+    ```bash
+    docker network prune -f
+    ```
+4.  Try spinning up the environment again:
+    ```bash
+    docker compose up -d --build
+    ```
