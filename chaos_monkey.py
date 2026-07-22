@@ -77,7 +77,12 @@ def execute_chaos():
             try:
                 # Use docker compose to perform the action
                 if action == "kill":
-                    subprocess.run(["docker", "compose", "kill", target], check=True, capture_output=True)
+                    # Find the container ID for the target service
+                    container_id = subprocess.run(["docker", "compose", "ps", "-q", target], check=True, capture_output=True, text=True).stdout.strip()
+                    if container_id:
+                        subprocess.run(["docker", "kill", container_id], check=True, capture_output=True)
+                    else:
+                        logger.warning(f"Could not find container for service {target} to kill")
                 elif action == "restart":
                     subprocess.run(["docker", "compose", "restart", target], check=True, capture_output=True)
 
