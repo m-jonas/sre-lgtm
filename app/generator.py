@@ -14,7 +14,9 @@ from opentelemetry._logs import set_logger_provider
 from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
 from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 import os
-
+from fastapi import FastAPI, BackgroundTasks, HTTPException
+from pydantic import BaseModel
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 # Configuration
 OTLP_ENDPOINT = os.getenv("OTLP_ENDPOINT", "http://otel-collector:4317")
 SERVICE_NAME = "stock-generator"
@@ -66,16 +68,26 @@ logging.getLogger().addHandler(logging.StreamHandler())
 logging.getLogger().setLevel(logging.INFO)
 
 
-def simulate_trade():
+app = FastAPI(title="Stock Generator API")
+FastAPIInstrumentor.instrument_app(app)
+
+class TradeRequest(BaseModel):
+    # Number of prime calculations to simulate CPU load
+    cpu_spin_iterations: int = 50000
+
+def simulate_trade(iterations: int):
     symbol = random.choice(list(stocks.keys()))
     stock = stocks[symbol]
 
     with tracer.start_as_current_span("process_trade") as span:
         span.set_attribute("stock.symbol", symbol)
 
+        # Simulate CPU work to trigger HPA
+        _ = sum([i * i for i in range(iterations)])
+
         # Simulate price movement
         change = random.uniform(-stock["volatility"], stock["volatility"])
-        stock["price"] = max(1.0, stock["price"] + change) # Price can't be negative
+        stock["price"] = max(1.0, stock["price"] + change)
 
         # Simulate trade volume
         shares = random.randint(10, 1000)
@@ -96,14 +108,13 @@ def simulate_trade():
             "price": stock["price"]
         })
 
-        # Simulate some processing time
-        time.sleep(random.uniform(0.01, 0.1))
+@app.post("/ingest")
+async def ingest_trade(request: TradeRequest, background_tasks: BackgroundTasks):
+    # Run the simulation in a background task or directly.
+    # To properly simulate CPU load and block the loop (increasing CPU usage), we run it directly.
+    simulate_trade(request.cpu_spin_iterations)
+    return {"status": "success", "message": "Trade processed"}
 
-if __name__ == "__main__":
-    logger.info("Starting stock generator...")
-    try:
-        while True:
-            simulate_trade()
-            time.sleep(random.uniform(0.5, 2.0))
-    except KeyboardInterrupt:
-        logger.info("Shutting down stock generator...")
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
