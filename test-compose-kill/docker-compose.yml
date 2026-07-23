@@ -1,5 +1,0 @@
-services:
-  test:
-    image: alpine
-    command: sleep 1000
-    restart: unless-stopped
