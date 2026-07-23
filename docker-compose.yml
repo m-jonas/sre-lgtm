@@ -1,7 +1,7 @@
 services:
   loki:
     image: grafana/loki:2.9.1
-    restart: on-failure
+    restart: unless-stopped
     ports:
       - "3100:3100"
     command: -config.file=/etc/loki/local-config.yaml
@@ -12,7 +12,7 @@ services:
 
   tempo:
     image: grafana/tempo:2.2.3
-    restart: on-failure
+    restart: unless-stopped
     command: [ "-config.file=/etc/tempo.yaml" ]
     volumes:
       - ./config/tempo.yaml:/etc/tempo.yaml
@@ -23,7 +23,7 @@ services:
 
   mimir:
     image: grafana/mimir:2.10.1
-    restart: on-failure
+    restart: unless-stopped
     command: [ "-config.file=/etc/mimir.yaml" ]
     volumes:
       - ./config/mimir.yaml:/etc/mimir.yaml
@@ -34,7 +34,7 @@ services:
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.87.0
-    restart: on-failure
+    restart: unless-stopped
     command: [ "--config=/etc/otel-collector.yaml" ]
     volumes:
       - ./config/otel-collector.yaml:/etc/otel-collector.yaml
@@ -50,7 +50,7 @@ services:
 
   grafana:
     image: grafana/grafana:10.1.5
-    restart: on-failure
+    restart: unless-stopped
     environment:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
@@ -70,7 +70,7 @@ services:
   stock-generator:
     build:
       context: ./app
-    restart: on-failure
+    restart: unless-stopped
     environment:
       - OTLP_ENDPOINT=http://otel-collector:4317
     networks:
