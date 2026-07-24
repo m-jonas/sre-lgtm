@@ -45,11 +45,15 @@ To run this project, you need the following installed on your local machine:
     ```
 
 2.  **Start the Environment:**
-    Run the following command to build the Python application image and start all the services in the background:
+    First, start the LGTM observability stack using Docker Compose:
     ```bash
-    docker compose up -d --build
+    docker compose up -d
     ```
-    *Note: The first time you run this, it may take a few minutes to download the necessary Docker images and build the `stock-generator` image.*
+    Then, create the local Kubernetes (Kind) cluster and deploy the data ingestion application by running the setup script:
+    ```bash
+    ./scripts/setup-kind.sh
+    ```
+    *Note: The first time you run this, it may take a few minutes to download the necessary Docker images, build the `stock-generator` image, and spin up the Kind cluster.*
 
 3.  **Access Grafana:**
     Once all containers are up and running, you can access the Grafana UI in your web browser:
@@ -62,11 +66,10 @@ To run this project, you need the following installed on your local machine:
     - The `stock-generator` application will continuously generate data as long as it is running.
 
 5.  **Stop the Environment:**
-    When you are finished, you can stop and remove the containers using:
+    When you are completely finished, use the comprehensive teardown script to cleanly delete the Kubernetes cluster and stop the Docker Compose services without leaving any leftover networks or volumes:
     ```bash
-    docker compose down
+    ./scripts/teardown.sh
     ```
-    If you also want to remove any volumes that were created (though none are defined as persistent in the current `docker-compose.yml`), you can add the `-v` flag: `docker compose down -v`.
 
 ## Configuration Details
 - **OpenTelemetry Collector:** Configuration is located at `config/otel-collector.yaml`.
@@ -135,3 +138,49 @@ You can resolve this by configuring Docker to use the `vfs` storage driver. This
     ```bash
     docker compose up -d --build
     ```
+
+## Kubernetes Data Ingestion Walkthrough
+
+I have successfully completed the migration and enhancements to introduce the Kubernetes-based mock data ingestion system! Here is a summary of the new architecture and how to use it.
+
+### Overview of Changes
+
+1. **FastAPI Refactor**: `app/generator.py` has been completely rewritten from a script into a fast, async web server using `FastAPI`. It now listens for HTTP `POST /ingest` requests and handles the OpenTelemetry instrumentation for every incoming trade.
+2. **Kubernetes Migration**: We created a full suite of Kubernetes manifests inside the `k8s/` directory.
+   - **Deployment**: `k8s/deployment.yaml` strictly bounds each pod's maximum CPU usage to `200m` (1/5th of a core) and memory to `128Mi`, ensuring your laptop remains perfectly responsive even under heavy load.
+   - **Service**: `k8s/service.yaml` exposes the application outside of Kind on port `8000`.
+   - **HPA**: `k8s/hpa.yaml` automatically monitors CPU usage. Once utilization goes past 50%, it provisions new pods, scaling horizontally up to a maximum of 5 pods.
+3. **Load Simulator**: A new script, `app/load_simulator.py`, was added so you can manually trigger traffic spikes and watch the autoscaling react in real-time.
+4. **Automation Scripts**: We added `./scripts/setup-kind.sh` and `./scripts/teardown.sh` to fully automate the lifecycle of this system with zero leftover traces.
+
+### How to Test the Setup
+
+#### 1. Verify LGTM Stack
+Your Grafana instance is running via Docker Compose at [http://localhost:3000](http://localhost:3000). The OpenTelemetry collector is successfully receiving metrics from our new Kubernetes cluster.
+
+#### 2. Run a Quiet Market Load
+You can simulate a normal, slow market by running the following command in your terminal. This sends 2 requests per second to the API:
+```bash
+source .venv/bin/activate
+python app/load_simulator.py --mode quiet --duration 60
+```
+*If you run `kubectl get hpa -w` in another terminal, you'll see CPU utilization remains low (e.g., 10%) and the replicas stay at 1.*
+
+#### 3. Trigger a Busy Market (Autoscaling)
+To see the Horizontal Pod Autoscaler in action, run a busy market load. This will send 50 requests per second and instruct the API to do significantly more CPU work per request:
+```bash
+python app/load_simulator.py --mode busy --duration 120
+```
+As this runs, you can monitor the HPA:
+```bash
+kubectl get hpa -w
+```
+You will see the CPU utilization spike well past 50%, and Kubernetes will automatically spin up 4 new pods (for a total of 5) to handle the load.
+
+#### 4. Complete Teardown
+When you are completely finished with your environment, you can run the teardown script:
+```bash
+./scripts/teardown.sh
+```
+> [!TIP]
+> This script is fully comprehensive. It deletes the Kind cluster, deletes all associated Docker networks, removes the unused images, and tears down the Docker Compose environment, leaving no trace on your laptop.

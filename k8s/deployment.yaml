@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stock-generator
+  labels:
+    app: stock-generator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: stock-generator
+  template:
+    metadata:
+      labels:
+        app: stock-generator
+    spec:
+      containers:
+      - name: stock-generator
+        image: stock-generator:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8000
+        env:
+        - name: OTLP_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: otel-config
+              key: OTLP_ENDPOINT
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+          limits:
+            cpu: "200m"
+            memory: "128Mi"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 2
+          periodSeconds: 5
