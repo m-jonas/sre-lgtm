@@ -213,7 +213,7 @@
             "uid": "Mimir"
           },
           "editorMode": "code",
-          "expr": "sum by (symbol) (increase(stock_volume_total[1m]))",
+          "expr": "sum by (symbol) (increase(stock_volume[1m]))",
           "legendFormat": "{{symbol}}",
           "range": true,
           "refId": "A"
@@ -251,7 +251,7 @@
             "uid": "Loki"
           },
           "editorMode": "code",
-          "expr": "{service_name=\"stock-generator\"}",
+          "expr": "{job=\"stock-generator\"}",
           "queryType": "range",
           "refId": "A"
         }
