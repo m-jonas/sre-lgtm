@@ -34,7 +34,7 @@ datasources:
     uid: Mimir
     type: prometheus
     access: proxy
-    url: http://mimir:9009
+    url: http://mimir:9009/prometheus
     jsonData:
       httpMethod: POST
       prometheusType: Mimir
