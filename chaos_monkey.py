@@ -75,24 +75,37 @@ def execute_chaos():
             logger.info(f"Applying '{action}' to service: {target}", extra={"target": target, "action": action})
 
             try:
-                # Use docker compose to perform the action
-                if action == "kill":
-                    # Find the container ID for the target service
-                    container_id = subprocess.run(["docker", "compose", "ps", "-q", target], check=True, capture_output=True, text=True).stdout.strip()
-                    if container_id:
-                        # We use 'restart -t 0' (timeout 0 = SIGKILL) instead of 'kill'
-                        # because 'kill' disables the 'unless-stopped' restart policy.
-                        # This simulates an ungraceful crash and subsequent recovery.
-                        subprocess.run(["docker", "restart", "-t", "0", container_id], check=True, capture_output=True)
-                    else:
-                        logger.warning(f"Could not find container for service {target} to kill")
-                elif action == "restart":
-                    subprocess.run(["docker", "compose", "restart", target], check=True, capture_output=True)
+                # Check if target is running as a Kubernetes pod
+                k8s_pods_res = subprocess.run(
+                    ["kubectl", "get", "pods", "-l", f"app={target}", "-o", "jsonpath='{.items[*].metadata.name}'"],
+                    capture_output=True, text=True
+                )
+                pod_names = k8s_pods_res.stdout.strip().strip("'").split()
+                if pod_names and pod_names[0]:
+                    # Kubernetes target disruption
+                    if action == "kill":
+                        target_pod = random.choice(pod_names)
+                        logger.info(f"Killing Kubernetes pod: {target_pod}")
+                        subprocess.run(["kubectl", "delete", "pod", target_pod, "--grace-period=0", "--force"], check=True, capture_output=True)
+                    elif action == "restart":
+                        logger.info(f"Triggering rolling restart for Kubernetes deployment: {target}")
+                        subprocess.run(["kubectl", "rollout", "restart", f"deployment/{target}"], check=True, capture_output=True)
+                else:
+                    # Docker Compose target disruption
+                    if action == "kill":
+                        container_id = subprocess.run(["docker", "compose", "ps", "-q", target], check=True, capture_output=True, text=True).stdout.strip()
+                        if container_id:
+                            subprocess.run(["docker", "restart", "-t", "0", container_id], check=True, capture_output=True)
+                        else:
+                            logger.warning(f"Could not find container or pod for service {target} to disrupt")
+                    elif action == "restart":
+                        subprocess.run(["docker", "compose", "restart", target], check=True, capture_output=True)
 
                 logger.info(f"Successfully executed {action} on {target}")
             except subprocess.CalledProcessError as e:
-                logger.error(f"Failed to execute {action} on {target}: {e.stderr.decode('utf-8')}")
-                span.set_attribute(f"chaos.error.{target}", str(e))
+                err_msg = e.stderr.decode('utf-8') if e.stderr else str(e)
+                logger.error(f"Failed to execute {action} on {target}: {err_msg}")
+                span.set_attribute(f"chaos.error.{target}", err_msg)
 
 if __name__ == "__main__":
     logger.info("Starting chaos monkey...")
