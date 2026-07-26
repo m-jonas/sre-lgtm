@@ -18,7 +18,7 @@ echo "Loading image into Kind..."
 kind load docker-image stock-generator:latest
 
 echo "Getting Docker bridge IP for OTLP connectivity..."
-HOST_IP=$(docker network inspect kind -f '{{(index .IPAM.Config 0).Gateway}}')
+HOST_IP=$(docker inspect kind-control-plane -f '{{.NetworkSettings.Networks.kind.Gateway}}')
 echo "Host IP from Kind is $HOST_IP"
 
 echo "Creating ConfigMap with OTLP Endpoint..."

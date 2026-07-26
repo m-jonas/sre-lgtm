@@ -67,16 +67,5 @@ services:
       - tempo
       - mimir
 
-  stock-generator:
-    build:
-      context: ./app
-    restart: unless-stopped
-    environment:
-      - OTLP_ENDPOINT=http://otel-collector:4317
-    networks:
-      - lgtm
-    depends_on:
-      - otel-collector
-
 networks:
   lgtm:

@@ -139,48 +139,73 @@ You can resolve this by configuring Docker to use the `vfs` storage driver. This
     docker compose up -d --build
     ```
 
-## Kubernetes Data Ingestion Walkthrough
+## Autonomous Kubernetes Market Engine & Autoscaling Walkthrough
 
-I have successfully completed the migration and enhancements to introduce the Kubernetes-based mock data ingestion system! Here is a summary of the new architecture and how to use it.
+We have re-architected the system into a unified, autonomous Kubernetes-native stock market simulation engine with authentic hardware resource spiking and fast autoscaling!
 
-### Overview of Changes
+### Overview of Architectural Enhancements
 
-1. **FastAPI Refactor**: `app/generator.py` has been completely rewritten from a script into a fast, async web server using `FastAPI`. It now listens for HTTP `POST /ingest` requests and handles the OpenTelemetry instrumentation for every incoming trade.
-2. **Kubernetes Migration**: We created a full suite of Kubernetes manifests inside the `k8s/` directory.
-   - **Deployment**: `k8s/deployment.yaml` strictly bounds each pod's maximum CPU usage to `200m` (1/5th of a core) and memory to `128Mi`, ensuring your laptop remains perfectly responsive even under heavy load.
-   - **Service**: `k8s/service.yaml` exposes the application outside of Kind on port `8000`.
-   - **HPA**: `k8s/hpa.yaml` automatically monitors CPU usage. Once utilization goes past 50%, it provisions new pods, scaling horizontally up to a maximum of 5 pods.
-3. **Load Simulator**: A new script, `app/load_simulator.py`, was added so you can manually trigger traffic spikes and watch the autoscaling react in real-time.
-4. **Automation Scripts**: We added `./scripts/setup-kind.sh` and `./scripts/teardown.sh` to fully automate the lifecycle of this system with zero leftover traces.
+1. **Unified Autonomous Market Engine (`app/generator.py`)**:
+   - Eliminated the external `load_simulator.py` script and removed `stock-generator` from Docker Compose. The application runs exclusively natively inside Kubernetes (Kind).
+   - The engine features an autonomous background trading loop that operates in two dynamic modes: `quiet` and `busy`.
+   - **Authentic Resource Spikes**: Instead of artificial CPU spin loops, hardware CPU surges are driven by processing realistic stock metadata—including limit order book matching, volatility Bollinger Bands, and Black-Scholes derivative pricing (option Greeks delta and gamma calculations).
+2. **Fast Scale-Down Autoscaling (`k8s/hpa.yaml`)**:
+   - Configured the Horizontal Pod Autoscaler with an explicit 15-second stabilization window (`scaleDown.stabilizationWindowSeconds: 15`).
+   - When trading volume surges on a busy day, pods scale up from 1 to 5 replicas. As soon as the market quiets, pods scale back down to 1 replica within ~15–30 seconds.
+3. **Architecture-Aware Chaos Monkey (`chaos_monkey.py`)**:
+   - Enhanced Chaos Monkey to target both Kubernetes pods (`kubectl delete pod --grace-period=0 --force` or rolling deployment restarts) and Docker Compose observability containers.
+4. **Upgraded Grafana Dashboard**:
+   - New dedicated panels in Grafana displaying real-time Pod CPU Utilization (%), Pod Memory Usage (MB), Active Pod Replicas (HPA status), Trade Volume Spikes, and Chaos Disruption Events.
 
-### How to Test the Setup
+---
 
-#### 1. Verify LGTM Stack
-Your Grafana instance is running via Docker Compose at [http://localhost:3000](http://localhost:3000). The OpenTelemetry collector is successfully receiving metrics from our new Kubernetes cluster.
+### How to Simulate Market Days & Test Autoscaling
 
-#### 2. Run a Quiet Market Load
-You can simulate a normal, slow market by running the following command in your terminal. This sends 2 requests per second to the API:
+#### 1. Start the Environment
+Ensure the LGTM observability stack and Kind cluster are running:
 ```bash
-source .venv/bin/activate
-python app/load_simulator.py --mode quiet --duration 60
+docker compose up -d
+./scripts/setup-kind.sh
 ```
-*If you run `kubectl get hpa -w` in another terminal, you'll see CPU utilization remains low (e.g., 10%) and the replicas stay at 1.*
+Your Grafana dashboard is accessible at [http://localhost:3000](http://localhost:3000) (Dashboard: **Stock Trading Overview**).
 
-#### 3. Trigger a Busy Market (Autoscaling)
-To see the Horizontal Pod Autoscaler in action, run a busy market load. This will send 50 requests per second and instruct the API to do significantly more CPU work per request:
+#### 2. Simulate a Quiet Trading Day
+To run a quiet market (low volume, ~5% CPU utilization, 1 pod replica):
 ```bash
-python app/load_simulator.py --mode busy --duration 120
+./scripts/simulate-market.sh quiet
 ```
-As this runs, you can monitor the HPA:
+Monitor the HPA status to verify stable low utilization:
 ```bash
 kubectl get hpa -w
 ```
-You will see the CPU utilization spike well past 50%, and Kubernetes will automatically spin up 4 new pods (for a total of 5) to handle the load.
 
-#### 4. Complete Teardown
-When you are completely finished with your environment, you can run the teardown script:
+#### 3. Simulate a Busy Trading Day (Surging to 5 Pods)
+To simulate a high-volume busy trading day where intensive stock derivative pricing spikes pod CPU utilization:
+```bash
+./scripts/simulate-market.sh busy
+```
+Watch in real-time as HPA detects CPU utilization > 50% and scales pod replicas from 1 to 5:
+```bash
+kubectl get hpa -w
+```
+
+#### 4. Observe Fast Scale-Down (5 -> 1 Pod)
+Once you are done observing the busy market, return to quiet mode:
+```bash
+./scripts/simulate-market.sh quiet
+```
+Thanks to our custom HPA behavioral policy, you will observe the replicas scale straight back down from 5 to 1 within ~15–30 seconds!
+
+#### 5. Run Chaos Monkey Resilience Testing
+Test system resilience under chaotic disruptions across both Kubernetes pods and observability services:
+```bash
+source .venv/bin/activate
+python chaos_monkey.py
+```
+Check the **Chaos Monkey Disruption Events** and **Active Pod Replicas** panels in Grafana to observe self-healing in action.
+
+#### 6. Complete Teardown
+When finished, clean up all clusters, networks, and containers:
 ```bash
 ./scripts/teardown.sh
 ```
-> [!TIP]
-> This script is fully comprehensive. It deletes the Kind cluster, deletes all associated Docker networks, removes the unused images, and tears down the Docker Compose environment, leaving no trace on your laptop.
